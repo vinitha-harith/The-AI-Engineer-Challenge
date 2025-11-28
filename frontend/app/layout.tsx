@@ -6,6 +6,9 @@ export const metadata: Metadata = {
   description: 'A supportive mental coach powered by AI to help you on your wellness journey',
 }
 
+// Disable caching for dynamic content
+export const revalidate = 0
+
 export default function RootLayout({
   children,
 }: {

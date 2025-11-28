@@ -1,4 +1,11 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'
+// API Base URL configuration:
+// - Production: Use NEXT_PUBLIC_API_URL env var, or empty string (uses Vercel rewrites)
+// - Development: Use localhost when running locally
+const API_BASE_URL = 
+  process.env.NEXT_PUBLIC_API_URL || 
+  (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ? 'http://127.0.0.1:8000'
+    : '')
 
 export interface ChatResponse {
   reply: string
@@ -11,11 +18,20 @@ export interface ChatResponse {
  * @throws Error if the API request fails
  */
 export const sendMessage = async (message: string): Promise<ChatResponse> => {
-  const response = await fetch(`${API_BASE_URL}/api/chat`, {
+  // Construct API URL - handle empty base URL (uses relative path)
+  const apiUrl = API_BASE_URL 
+    ? `${API_BASE_URL.replace(/\/$/, '')}/api/chat`  // Remove trailing slash if present
+    : '/api/chat'  // Relative path for Vercel rewrites
+  
+  const response = await fetch(apiUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0',
     },
+    cache: 'no-store', // Disable caching for this request
     body: JSON.stringify({ message }),
   })
 
