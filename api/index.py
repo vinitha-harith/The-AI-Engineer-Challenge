@@ -4,28 +4,24 @@ from pydantic import BaseModel
 from openai import OpenAI
 import os
 from dotenv import load_dotenv
+from mangum import Mangum
 
 load_dotenv()
 
 app = FastAPI()
 
 # CORS configuration - allow public access
-# By default, allows all origins for public access
-# Set RESTRICT_CORS=true to restrict to specific origins
 restrict_cors = os.getenv("RESTRICT_CORS", "false").lower() == "true"
 
 if restrict_cors:
-    # Restricted mode: only allow specific origins
     allowed_origins = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
     ]
-    # Add frontend URL from environment if set
     frontend_url = os.getenv("FRONTEND_URL", "")
     if frontend_url:
         allowed_origins.append(frontend_url)
 else:
-    # Public mode: allow all origins (default for public access)
     allowed_origins = ["*"]
 
 app.add_middleware(
@@ -53,7 +49,7 @@ def chat(request: ChatRequest):
     try:
         user_message = request.message
         response = client.chat.completions.create(
-            model="gpt-4o-mini",  # Using valid OpenAI model (gpt-5 doesn't exist)
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "You are a supportive mental coach."},
                 {"role": "user", "content": user_message}
@@ -62,3 +58,7 @@ def chat(request: ChatRequest):
         return {"reply": response.choices[0].message.content}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error calling OpenAI API: {str(e)}")
+
+# Wrap with Mangum for Vercel serverless function compatibility
+# Export as handler variable which Vercel expects
+handler = Mangum(app)
