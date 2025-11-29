@@ -59,6 +59,11 @@ def chat(request: ChatRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error calling OpenAI API: {str(e)}")
 
-# Wrap with Mangum for Vercel serverless function compatibility
-# Export as handler variable which Vercel expects
-handler = Mangum(app)
+# Create Mangum handler for Vercel serverless compatibility
+# Export as a callable handler function to avoid BaseHTTPRequestHandler check errors
+_mangum_instance = Mangum(app, lifespan="off")
+
+# Lambda-style handler function that Vercel's runtime expects
+def handler(event, context=None):
+    """Vercel serverless function handler"""
+    return _mangum_instance(event, context)
