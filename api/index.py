@@ -53,7 +53,7 @@ def chat(request: ChatRequest):
     try:
         user_message = request.message
         response = client.chat.completions.create(
-            model="gpt-5",
+            model="gpt-4o-mini",  # Using valid OpenAI model (gpt-5 doesn't exist)
             messages=[
                 {"role": "system", "content": "You are a supportive mental coach."},
                 {"role": "user", "content": user_message}
