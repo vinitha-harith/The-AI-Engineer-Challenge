@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from openai import OpenAI
 import os
 from dotenv import load_dotenv
-from mangum import Mangum
+# from mangum import Mangum  # Commented out - Vercel should handle ASGI apps natively
 
 load_dotenv()
 
@@ -59,11 +59,10 @@ def chat(request: ChatRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error calling OpenAI API: {str(e)}")
 
-# Create Mangum handler for Vercel serverless compatibility
-# Export as a callable handler function to avoid BaseHTTPRequestHandler check errors
-_mangum_instance = Mangum(app, lifespan="off")
+# Mangum handler commented out - Vercel's @vercel/python should handle ASGI apps natively
+# _mangum_instance = Mangum(app, lifespan="off")
+# def handler(event, context=None):
+#     """Vercel serverless function handler"""
+#     return _mangum_instance(event, context)
 
-# Lambda-style handler function that Vercel's runtime expects
-def handler(event, context=None):
-    """Vercel serverless function handler"""
-    return _mangum_instance(event, context)
+# Export app directly - Vercel's runtime should automatically detect and handle FastAPI apps
