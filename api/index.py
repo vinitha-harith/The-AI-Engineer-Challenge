@@ -9,12 +9,31 @@ load_dotenv()
 
 app = FastAPI()
 
-# CORS so the frontend can talk to backend
+# CORS configuration - allow public access
+# By default, allows all origins for public access
+# Set RESTRICT_CORS=true to restrict to specific origins
+restrict_cors = os.getenv("RESTRICT_CORS", "false").lower() == "true"
+
+if restrict_cors:
+    # Restricted mode: only allow specific origins
+    allowed_origins = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
+    # Add frontend URL from environment if set
+    frontend_url = os.getenv("FRONTEND_URL", "")
+    if frontend_url:
+        allowed_origins.append(frontend_url)
+else:
+    # Public mode: allow all origins (default for public access)
+    allowed_origins = ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"]
+    allow_origins=allowed_origins,
+    allow_credentials=True if not restrict_cors else False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))

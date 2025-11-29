@@ -23,23 +23,39 @@ export const sendMessage = async (message: string): Promise<ChatResponse> => {
     ? `${API_BASE_URL.replace(/\/$/, '')}/api/chat`  // Remove trailing slash if present
     : '/api/chat'  // Relative path for Vercel rewrites
   
-  const response = await fetch(apiUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Cache-Control': 'no-cache, no-store, must-revalidate',
-      'Pragma': 'no-cache',
-      'Expires': '0',
-    },
-    cache: 'no-store', // Disable caching for this request
-    body: JSON.stringify({ message }),
-  })
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      },
+      cache: 'no-store', // Disable caching for this request
+      body: JSON.stringify({ message }),
+    })
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: 'Unknown error' }))
-    throw new Error(error.detail || `HTTP error! status: ${response.status}`)
+    if (!response.ok) {
+      // Try to get error message from response
+      let errorMessage = `HTTP error! status: ${response.status}`
+      try {
+        const errorData = await response.json()
+        errorMessage = errorData.detail || errorData.message || errorMessage
+      } catch {
+        // If response is not JSON, use status text
+        errorMessage = response.statusText || errorMessage
+      }
+      throw new Error(errorMessage)
+    }
+
+    return response.json()
+  } catch (error) {
+    // Handle network errors or other fetch failures
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      throw new Error('Unable to connect to the server. Please check your connection and ensure the backend is running.')
+    }
+    throw error
   }
-
-  return response.json()
 }
 

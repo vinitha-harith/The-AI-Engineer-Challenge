@@ -31,10 +31,21 @@ source .venv/bin/activate  # Windows: .venv\Scripts\activate
 Start the FastAPI app with the dependencies managed by `uv`:
 
 ```bash
-uv run uvicorn api.index:app --reload
+uv run uvicorn api.index:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-This runs the app with `uvicorn` on `http://localhost:8000` with auto-reload enabled for development. The server will automatically restart when you make changes to the code.
+This runs the app with `uvicorn` on `0.0.0.0:8000`, making it accessible from:
+- **Localhost**: `http://localhost:8000` or `http://127.0.0.1:8000`
+- **Local Network**: `http://YOUR_LOCAL_IP:8000` (accessible from devices on your local network)
+- **Public IP**: `http://YOUR_PUBLIC_IP:8000` (if configured with port forwarding)
+
+The server will automatically restart when you make changes to the code (auto-reload enabled).
+
+**Important Notes for Public IP Access:**
+- Ensure port 8000 is open in your firewall
+- If behind a router, configure port forwarding: forward port 8000 to your local machine
+- Use your router's public IP address (or set up dynamic DNS if it changes)
+- For production use, consider using HTTPS and proper security measures
 
 **Note:** Make sure the `OPENAI_API_KEY` environment variable is set in your shell before launching the server. You can set it with:
 
@@ -81,8 +92,12 @@ The chat endpoint uses OpenAI's GPT-5 model with a supportive mental coach syste
 ## API Documentation
 
 Once the server is running, you can access the interactive API documentation at:
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
+- Swagger UI: 
+  - Local: `http://localhost:8000/docs`
+  - Network: `http://YOUR_IP_ADDRESS:8000/docs`
+- ReDoc: 
+  - Local: `http://localhost:8000/redoc`
+  - Network: `http://YOUR_IP_ADDRESS:8000/redoc`
 
 ## CORS Configuration
 
@@ -102,7 +117,13 @@ All errors will return a 500 status code with an error message.
 Once your server is running, you can test the chat endpoint using curl:
 
 ```bash
+# From the same machine (localhost)
 curl -X POST http://127.0.0.1:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Hello"}'
+
+# From another device on your network (replace with your IP)
+curl -X POST http://YOUR_IP_ADDRESS:8000/api/chat \
   -H "Content-Type: application/json" \
   -d '{"message": "Hello"}'
 ```

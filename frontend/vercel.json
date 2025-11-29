@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://the-ai-engineer-challenge-v3g4.vercel.app/api/:path*"
+      "destination": "https://your-backend-url.vercel.app/api/:path*"
     }
   ]
 }

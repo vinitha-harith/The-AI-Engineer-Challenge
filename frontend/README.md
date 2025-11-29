@@ -59,8 +59,9 @@ pnpm dev
 5. **Make sure your backend is running** (in another terminal):
 ```bash
 # From the project root
-uv run uvicorn api.index:app --reload
+uv run uvicorn api.index:app --host 0.0.0.0 --port 8000 --reload
 ```
+This makes the backend accessible from your network (not just localhost).
 
 That's it! You're now chatting with your AI coach. 🎉
 
@@ -129,20 +130,32 @@ We've put a lot of thought into making this interface pleasant to use:
 Create a `.env.local` file (it's gitignored, so your secrets stay secret):
 
 ```env
+# For local development
 NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
+
+# Or use your network IP to access from other devices
+# NEXT_PUBLIC_API_URL=http://YOUR_IP_ADDRESS:8000
+
+# For production, use your deployed backend URL
+# NEXT_PUBLIC_API_URL=https://your-backend.vercel.app
 ```
 
-For production, set this to your deployed backend URL.
+For production, set this to your deployed backend URL (e.g., Vercel deployment URL).
 
 ### API Configuration
 
-The frontend expects your backend to be running on `http://127.0.0.1:8000` by default. If your backend is elsewhere, just update the `NEXT_PUBLIC_API_URL` environment variable.
+The frontend expects your backend to be running on `http://127.0.0.1:8000` by default. You can also use:
+- **Local**: `http://127.0.0.1:8000` or `http://localhost:8000`
+- **Network IP**: `http://YOUR_IP_ADDRESS:8000` (if backend is accessible via network IP)
+- **Production**: Your Vercel backend URL
+
+Just update the `NEXT_PUBLIC_API_URL` environment variable accordingly.
 
 ## 🐛 Troubleshooting
 
 ### "I can't connect to the API!"
 
-- Make sure your backend is running (`uv run uvicorn api.index:app --reload`)
+- Make sure your backend is running (`uv run uvicorn api.index:app --host 0.0.0.0 --port 8000 --reload`)
 - Check that the API URL in your `.env.local` matches where your backend is running
 - Open your browser's developer console (F12) and check for error messages
 
