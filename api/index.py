@@ -4,32 +4,17 @@ from pydantic import BaseModel
 from openai import OpenAI
 import os
 from dotenv import load_dotenv
-# from mangum import Mangum  # Commented out - Vercel should handle ASGI apps natively
 
 load_dotenv()
 
 app = FastAPI()
 
-# CORS configuration - allow public access
-restrict_cors = os.getenv("RESTRICT_CORS", "false").lower() == "true"
-
-if restrict_cors:
-    allowed_origins = [
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ]
-    frontend_url = os.getenv("FRONTEND_URL", "")
-    if frontend_url:
-        allowed_origins.append(frontend_url)
-else:
-    allowed_origins = ["*"]
-
+# CORS so the frontend can talk to backend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
-    allow_credentials=True if not restrict_cors else False,
-    allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization"],
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"]
 )
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -49,7 +34,7 @@ def chat(request: ChatRequest):
     try:
         user_message = request.message
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-5",
             messages=[
                 {"role": "system", "content": "You are a supportive mental coach."},
                 {"role": "user", "content": user_message}
@@ -58,11 +43,3 @@ def chat(request: ChatRequest):
         return {"reply": response.choices[0].message.content}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error calling OpenAI API: {str(e)}")
-
-# Mangum handler commented out - Vercel's @vercel/python should handle ASGI apps natively
-# _mangum_instance = Mangum(app, lifespan="off")
-# def handler(event, context=None):
-#     """Vercel serverless function handler"""
-#     return _mangum_instance(event, context)
-
-# Export app directly - Vercel's runtime should automatically detect and handle FastAPI apps
