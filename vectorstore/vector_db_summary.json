@@ -1,0 +1,25 @@
+{
+  "created_at": "2026-01-24T23:27:17.964802",
+  "data_directory": "./data",
+  "num_documents": 2,
+  "num_chunks": 89,
+  "chunk_size": 500,
+  "chunk_overlap": 100,
+  "sources": [
+    "./data/workout_faq.pdf",
+    "./data/HealthWellnessGuide.txt"
+  ],
+  "topic_distribution": {
+    "habits": 9,
+    "exercise": 49,
+    "nutrition": 15,
+    "sleep": 7,
+    "stress": 6,
+    "health": 3
+  },
+  "difficulty_distribution": {
+    "intermediate": 6,
+    "beginner": 79,
+    "advanced": 4
+  }
+}
