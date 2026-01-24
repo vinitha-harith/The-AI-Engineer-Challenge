@@ -6,4 +6,4 @@ mangum>=0.17.0
 pydantic>=2.11.4
 pydantic-settings>=2.0.0
 PyPDF2>=3.0.0
-numpy>=1.26.0
+# numpy>=1.26.0  # Optional - pure Python fallback available

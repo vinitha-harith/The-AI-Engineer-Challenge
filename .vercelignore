@@ -1,0 +1,28 @@
+# Ignore large files that are loaded from URL instead
+vectorstore/
+data/
+
+# Development files
+.venv/
+*.pyc
+__pycache__/
+.pytest_cache/
+
+# IDE
+.idea/
+.vscode/
+
+# Jupyter
+*.ipynb
+.ipynb_checkpoints/
+
+# Documentation (not needed in deployment)
+*.md
+!README.md
+
+# Local env files
+.env
+.env.local
+
+# macOS
+.DS_Store

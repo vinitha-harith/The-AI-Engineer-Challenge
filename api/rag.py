@@ -52,15 +52,28 @@ class RetrievalPipeline:
     and provides semantic search and response generation.
     
     This is decoupled from the embedding process (see embed.py).
+    Supports loading from local file path or remote URL.
     """
+    
+    # Default URL for the vector database (GitHub raw URL)
+    DEFAULT_VECTOR_DB_URL = "https://raw.githubusercontent.com/vinitha-harith/The-AI-Engineer-Challenge/main/vectorstore/vector_db.json"
     
     def __init__(
         self,
-        vector_db_path: str,
+        vector_db_source: str = None,
         similarity_measure: str = "cosine",
         chat_model: str = "gpt-4o-mini"
     ):
-        self.vector_db_path = vector_db_path
+        """
+        Initialize the retrieval pipeline.
+        
+        Args:
+            vector_db_source: Path to local file OR URL to remote JSON.
+                              If None, uses DEFAULT_VECTOR_DB_URL.
+            similarity_measure: Default similarity measure to use.
+            chat_model: OpenAI chat model for response generation.
+        """
+        self.vector_db_source = vector_db_source or self.DEFAULT_VECTOR_DB_URL
         self.similarity_measure = similarity_measure
         self.chat_model_name = chat_model
         
@@ -89,21 +102,23 @@ Guidelines:
         self.user_prompt = UserRolePrompt("{question}")
 
     def initialize(self) -> None:
-        """Load the pre-built vector database."""
-        if not os.path.exists(self.vector_db_path):
-            raise FileNotFoundError(
-                f"Vector database not found at: {self.vector_db_path}\n"
-                f"Please run 'python -m api.embed' first to create the database."
-            )
-        
+        """Load the pre-built vector database from file or URL."""
         # Create embedding model for query embedding
         self.embedding_model = EmbeddingModel()
         
-        # Load the pre-built vector database
-        self.vector_db = MetadataVectorDatabase.load(
-            self.vector_db_path, 
-            embedding_model=self.embedding_model
-        )
+        # Load the pre-built vector database (auto-detects URL vs file path)
+        try:
+            self.vector_db = MetadataVectorDatabase.load_auto(
+                self.vector_db_source, 
+                embedding_model=self.embedding_model
+            )
+        except FileNotFoundError:
+            raise FileNotFoundError(
+                f"Vector database not found at: {self.vector_db_source}\n"
+                f"Please run 'python -m api.embed' first to create the database."
+            )
+        except Exception as e:
+            raise RuntimeError(f"Failed to load vector database: {e}")
         
         self.is_initialized = True
         print(f"Retrieval pipeline initialized with {self.vector_db.get_size()} vectors")
@@ -247,7 +262,7 @@ Guidelines:
             "topics": topic_counts,
             "difficulty_levels": difficulty_counts,
             "similarity_measure": self.similarity_measure,
-            "vector_db_path": self.vector_db_path
+            "vector_db_source": self.vector_db_source
         }
 
 
@@ -258,27 +273,28 @@ from functools import lru_cache
 
 @lru_cache(maxsize=1)
 def get_retrieval_pipeline(
-    vector_db_path: Optional[str] = None
+    vector_db_source: Optional[str] = None
 ) -> RetrievalPipeline:
     """
     Get or initialize the retrieval pipeline.
     
     Uses lru_cache for efficient caching without global state.
-    The cache is keyed by vector_db_path, so different paths
-    create different cached instances.
     
     Args:
-        vector_db_path: Path to the vector database JSON file
+        vector_db_source: Path to local file OR URL to remote JSON.
+                          If None, uses the default GitHub raw URL.
         
     Returns:
         Initialized RetrievalPipeline instance
     """
-    # Default path
-    if vector_db_path is None:
-        api_dir = Path(__file__).parent
-        vector_db_path = str(api_dir.parent / "vectorstore" / "vector_db.json")
+    # Use environment variable if set, otherwise use default URL
+    if vector_db_source is None:
+        vector_db_source = os.getenv(
+            "VECTOR_DB_URL",
+            RetrievalPipeline.DEFAULT_VECTOR_DB_URL
+        )
     
-    pipeline = RetrievalPipeline(vector_db_path=vector_db_path)
+    pipeline = RetrievalPipeline(vector_db_source=vector_db_source)
     pipeline.initialize()
     
     return pipeline

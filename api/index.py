@@ -31,7 +31,8 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
     
     openai_api_key: Optional[str] = None
-    vector_db_path: str = str(Path(__file__).parent.parent / "vectorstore" / "vector_db.json")
+    # URL or path to vector database (defaults to GitHub raw URL)
+    vector_db_url: str = "https://raw.githubusercontent.com/vinitha-harith/The-AI-Engineer-Challenge/main/vectorstore/vector_db.json"
     default_similarity_measure: str = "cosine"
     default_num_sources: int = 5
     chat_model: str = "gpt-4o-mini"
@@ -62,12 +63,13 @@ async def lifespan(app: FastAPI):
     
     # Startup: Initialize the retrieval pipeline
     print("🚀 Starting up Wellness Coach API...")
+    print(f"   Loading vector database from: {settings.vector_db_url}")
     
     try:
         from api.rag import RetrievalPipeline
         
         pipeline = RetrievalPipeline(
-            vector_db_path=settings.vector_db_path,
+            vector_db_source=settings.vector_db_url,
             similarity_measure=settings.default_similarity_measure,
             chat_model=settings.chat_model
         )
@@ -81,7 +83,7 @@ async def lifespan(app: FastAPI):
         
     except FileNotFoundError as e:
         print(f"⚠️  Vector database not found: {e}")
-        print("   Run 'python -m api.embed' to create it.")
+        print("   Run 'python -m api.embed' to create it, or check the URL.")
         app.state.pipeline = None
         app.state.is_healthy = False
         
@@ -123,25 +125,61 @@ def create_app() -> FastAPI:
 app = create_app()
 
 
+# ============ Lazy Pipeline Initialization ============
+
+# Cache for serverless environments (like Vercel) where lifespan events don't work
+_cached_pipeline = None
+
+
+def _get_or_create_pipeline(settings: Settings):
+    """
+    Lazy initialization of the pipeline for serverless environments.
+    
+    This is used because Vercel serverless functions don't support
+    FastAPI lifespan events.
+    """
+    global _cached_pipeline
+    
+    if _cached_pipeline is None:
+        from api.rag import RetrievalPipeline
+        
+        print(f"🚀 Lazy-loading pipeline from: {settings.vector_db_url}")
+        
+        pipeline = RetrievalPipeline(
+            vector_db_source=settings.vector_db_url,
+            similarity_measure=settings.default_similarity_measure,
+            chat_model=settings.chat_model
+        )
+        pipeline.initialize()
+        _cached_pipeline = pipeline
+        print(f"✅ Pipeline initialized with {pipeline.vector_db.get_size()} vectors")
+    
+    return _cached_pipeline
+
+
 # ============ Dependencies ============
 
-def get_pipeline(request: Request):
+def get_pipeline(request: Request, settings: Settings = Depends(get_settings)):
     """
     Dependency injection for the retrieval pipeline.
     
-    Retrieves the pipeline from app.state (initialized at startup).
-    Raises 503 if the pipeline is not available.
+    First tries app.state (for local development with lifespan).
+    Falls back to lazy initialization (for Vercel serverless).
     """
-    pipeline = request.app.state.pipeline
+    # Try app.state first (set by lifespan for local dev)
+    pipeline = getattr(request.app.state, 'pipeline', None)
     
-    if pipeline is None:
+    if pipeline is not None:
+        return pipeline
+    
+    # Fallback: lazy initialization for serverless
+    try:
+        return _get_or_create_pipeline(settings)
+    except Exception as e:
         raise HTTPException(
             status_code=503,
-            detail="Service unavailable. Vector database not initialized. "
-                   "Run 'python -m api.embed' to create the database."
+            detail=f"Service unavailable. Failed to initialize pipeline: {str(e)}"
         )
-    
-    return pipeline
 
 
 def require_api_key(settings: Settings = Depends(get_settings)):
@@ -180,7 +218,7 @@ class StatsResponse(BaseModel):
     topics: Dict[str, int]
     difficulty_levels: Dict[str, int]
     similarity_measure: str
-    vector_db_path: str
+    vector_db_source: str
 
 
 class ConfigResponse(BaseModel):
@@ -209,7 +247,8 @@ def root():
 @app.get("/api/health", response_model=HealthResponse)
 def health(request: Request, settings: Settings = Depends(get_settings)):
     """Detailed health check."""
-    pipeline = request.app.state.pipeline
+    # Try app.state first, then check cached pipeline
+    pipeline = getattr(request.app.state, 'pipeline', None) or _cached_pipeline
     
     if pipeline is None:
         return HealthResponse(
