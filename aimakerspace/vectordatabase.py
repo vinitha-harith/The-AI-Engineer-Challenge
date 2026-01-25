@@ -1,114 +1,83 @@
+"""
+Vector Database with Metadata Support (Production Version)
+
+This module provides efficient vector storage and similarity search using numpy.
+For Vercel deployment, use the self-contained index_vercel.py instead.
+"""
+
 import json
 import os
-import math
 import urllib.request
 from collections import defaultdict
-from typing import List, Tuple, Callable, Dict, Any, Optional, Union
+from typing import List, Tuple, Callable, Dict, Any, Optional
 from aimakerspace.openai_utils.embedding import EmbeddingModel
 import asyncio
-
-# Try to import numpy, fall back to pure Python if not available
-try:
-    import numpy as np
-    HAS_NUMPY = True
-except ImportError:
-    HAS_NUMPY = False
+import numpy as np
 
 
-# ============ Pure Python Vector Operations ============
+# ============ Similarity Measures (numpy optimized) ============
 
-def _dot_product_py(a: List[float], b: List[float]) -> float:
-    """Pure Python dot product."""
-    return sum(x * y for x, y in zip(a, b))
-
-
-def _norm_py(a: List[float]) -> float:
-    """Pure Python vector norm (L2)."""
-    return math.sqrt(sum(x * x for x in a))
-
-
-def _subtract_py(a: List[float], b: List[float]) -> List[float]:
-    """Pure Python vector subtraction."""
-    return [x - y for x, y in zip(a, b)]
-
-
-# ============ Similarity Measures ============
-
-def cosine_similarity(vector_a, vector_b) -> float:
-    """Computes the cosine similarity between two vectors."""
-    if HAS_NUMPY:
-        dot_product = np.dot(vector_a, vector_b)
-        norm_a = np.linalg.norm(vector_a)
-        norm_b = np.linalg.norm(vector_b)
-    else:
-        # Pure Python fallback
-        a = list(vector_a) if not isinstance(vector_a, list) else vector_a
-        b = list(vector_b) if not isinstance(vector_b, list) else vector_b
-        dot_product = _dot_product_py(a, b)
-        norm_a = _norm_py(a)
-        norm_b = _norm_py(b)
+def cosine_similarity(vector_a: np.ndarray, vector_b: np.ndarray) -> float:
+    """
+    Computes the cosine similarity between two vectors.
+    
+    Cosine similarity = (A · B) / (||A|| * ||B||)
+    Range: [-1, 1] where 1 = identical direction
+    """
+    dot_product = np.dot(vector_a, vector_b)
+    norm_a = np.linalg.norm(vector_a)
+    norm_b = np.linalg.norm(vector_b)
     
     if norm_a == 0 or norm_b == 0:
         return 0.0
-    return dot_product / (norm_a * norm_b)
+    return float(dot_product / (norm_a * norm_b))
 
 
-def euclidean_distance(vector_a, vector_b) -> float:
+def euclidean_distance(vector_a: np.ndarray, vector_b: np.ndarray) -> float:
     """
     Computes the euclidean distance between two vectors.
     Returns negative distance so higher values = more similar (for consistent sorting).
+    
+    Euclidean distance = ||A - B||
     """
-    if HAS_NUMPY:
-        distance = np.linalg.norm(vector_a - vector_b)
-    else:
-        a = list(vector_a) if not isinstance(vector_a, list) else vector_a
-        b = list(vector_b) if not isinstance(vector_b, list) else vector_b
-        diff = _subtract_py(a, b)
-        distance = _norm_py(diff)
-    return -distance  # Negative so higher = more similar
+    distance = np.linalg.norm(vector_a - vector_b)
+    return -float(distance)  # Negative so higher = more similar
 
 
-def dot_product_similarity(vector_a, vector_b) -> float:
-    """Computes the dot product between two vectors."""
-    if HAS_NUMPY:
-        return float(np.dot(vector_a, vector_b))
-    else:
-        a = list(vector_a) if not isinstance(vector_a, list) else vector_a
-        b = list(vector_b) if not isinstance(vector_b, list) else vector_b
-        return _dot_product_py(a, b)
+def dot_product_similarity(vector_a: np.ndarray, vector_b: np.ndarray) -> float:
+    """
+    Computes the dot product between two vectors.
+    
+    Useful for normalized vectors or when magnitude matters.
+    """
+    return float(np.dot(vector_a, vector_b))
 
 
-def manhattan_distance(vector_a, vector_b) -> float:
+def manhattan_distance(vector_a: np.ndarray, vector_b: np.ndarray) -> float:
     """
     Computes the Manhattan (L1) distance between two vectors.
     Returns negative distance so higher values = more similar.
+    
+    Manhattan distance = Σ|Ai - Bi|
     """
-    if HAS_NUMPY:
-        distance = np.sum(np.abs(vector_a - vector_b))
-    else:
-        a = list(vector_a) if not isinstance(vector_a, list) else vector_a
-        b = list(vector_b) if not isinstance(vector_b, list) else vector_b
-        distance = sum(abs(x - y) for x, y in zip(a, b))
-    return -distance
+    distance = np.sum(np.abs(vector_a - vector_b))
+    return -float(distance)
 
 
-def jaccard_similarity(vector_a, vector_b) -> float:
+def jaccard_similarity(vector_a: np.ndarray, vector_b: np.ndarray) -> float:
     """
     Computes Jaccard-like similarity for continuous vectors.
     Uses the ratio of minimum to maximum values element-wise.
+    
+    Jaccard = Σmin(|Ai|, |Bi|) / Σmax(|Ai|, |Bi|)
+    Range: [0, 1] where 1 = identical
     """
-    if HAS_NUMPY:
-        min_sum = np.sum(np.minimum(np.abs(vector_a), np.abs(vector_b)))
-        max_sum = np.sum(np.maximum(np.abs(vector_a), np.abs(vector_b)))
-    else:
-        a = list(vector_a) if not isinstance(vector_a, list) else vector_a
-        b = list(vector_b) if not isinstance(vector_b, list) else vector_b
-        min_sum = sum(min(abs(x), abs(y)) for x, y in zip(a, b))
-        max_sum = sum(max(abs(x), abs(y)) for x, y in zip(a, b))
+    min_sum = np.sum(np.minimum(np.abs(vector_a), np.abs(vector_b)))
+    max_sum = np.sum(np.maximum(np.abs(vector_a), np.abs(vector_b)))
     
     if max_sum == 0:
         return 0.0
-    return min_sum / max_sum
+    return float(min_sum / max_sum)
 
 
 # Map of similarity measure names to functions
@@ -121,33 +90,55 @@ SIMILARITY_MEASURES = {
 }
 
 
-def _to_vector(data) -> List[float]:
-    """Convert numpy array or list to list of floats."""
-    if HAS_NUMPY:
-        import numpy as np
-        if isinstance(data, np.ndarray):
-            return data.tolist()
-    if hasattr(data, 'tolist'):
+def _to_numpy(data) -> np.ndarray:
+    """Convert list or array to numpy array."""
+    if isinstance(data, np.ndarray):
+        return data
+    return np.array(data, dtype=np.float32)
+
+
+def _to_list(data) -> List[float]:
+    """Convert numpy array to list for JSON serialization."""
+    if isinstance(data, np.ndarray):
         return data.tolist()
     return list(data)
 
 
 class VectorDatabase:
+    """
+    Basic vector database for similarity search.
+    
+    Stores vectors as numpy arrays for efficient computation.
+    """
+    
     def __init__(self, embedding_model: EmbeddingModel = None):
-        self.vectors = defaultdict(list)
+        self.vectors: Dict[str, np.ndarray] = defaultdict(lambda: np.array([]))
         self.embedding_model = embedding_model or EmbeddingModel()
 
-    def insert(self, key: str, vector) -> None:
-        self.vectors[key] = _to_vector(vector)
+    def insert(self, key: str, vector: np.ndarray) -> None:
+        """Insert a vector with the given key."""
+        self.vectors[key] = _to_numpy(vector)
 
     def search(
         self,
-        query_vector,
+        query_vector: np.ndarray,
         k: int,
         distance_measure: Callable = cosine_similarity,
     ) -> List[Tuple[str, float]]:
+        """
+        Search for the k most similar vectors.
+        
+        Args:
+            query_vector: The query embedding
+            k: Number of results to return
+            distance_measure: Similarity function to use
+            
+        Returns:
+            List of (text, score) tuples sorted by similarity
+        """
+        query_np = _to_numpy(query_vector)
         scores = [
-            (key, distance_measure(query_vector, vector))
+            (key, distance_measure(query_np, vector))
             for key, vector in self.vectors.items()
         ]
         return sorted(scores, key=lambda x: x[1], reverse=True)[:k]
@@ -159,14 +150,17 @@ class VectorDatabase:
         distance_measure: Callable = cosine_similarity,
         return_as_text: bool = False,
     ) -> List[Tuple[str, float]]:
+        """Search by text query."""
         query_vector = self.embedding_model.get_embedding(query_text)
         results = self.search(query_vector, k, distance_measure)
         return [result[0] for result in results] if return_as_text else results
 
-    def retrieve_from_key(self, key: str):
-        return self.vectors.get(key, None)
+    def retrieve_from_key(self, key: str) -> Optional[np.ndarray]:
+        """Retrieve vector by key."""
+        return self.vectors.get(key)
 
     async def abuild_from_list(self, list_of_text: List[str]) -> "VectorDatabase":
+        """Build database from list of texts asynchronously."""
         embeddings = await self.embedding_model.async_get_embeddings(list_of_text)
         for text, embedding in zip(list_of_text, embeddings):
             self.insert(text, embedding)
@@ -177,16 +171,18 @@ class MetadataVectorDatabase:
     """
     Enhanced Vector Database with metadata support for filtering.
     
+    Production version with numpy optimization.
+    
     Supports:
     - Topic categories (exercise, nutrition, sleep, stress, habits, health)
     - Difficulty levels (beginner, intermediate, advanced)
     - Source file tracking
     - Multiple similarity measures
-    - Pure Python fallback when numpy is not available
+    - Save/load to JSON files or URLs
     """
     
     def __init__(self, embedding_model: EmbeddingModel = None):
-        self.vectors: Dict[str, List[float]] = {}
+        self.vectors: Dict[str, np.ndarray] = {}
         self.metadata: Dict[str, Dict[str, Any]] = {}
         self.embedding_model = embedding_model or EmbeddingModel()
         self.default_similarity = cosine_similarity
@@ -194,16 +190,16 @@ class MetadataVectorDatabase:
     def insert(
         self, 
         key: str, 
-        vector, 
+        vector: np.ndarray, 
         metadata: Optional[Dict[str, Any]] = None
     ) -> None:
         """Insert a vector with optional metadata."""
-        self.vectors[key] = _to_vector(vector)
+        self.vectors[key] = _to_numpy(vector)
         self.metadata[key] = metadata or {}
 
     def search(
         self,
-        query_vector,
+        query_vector: np.ndarray,
         k: int,
         distance_measure: Callable = None,
         filter_metadata: Optional[Dict[str, Any]] = None,
@@ -221,18 +217,19 @@ class MetadataVectorDatabase:
             List of (text, score, metadata) tuples
         """
         distance_measure = distance_measure or self.default_similarity
+        query_np = _to_numpy(query_vector)
         
         # Filter vectors by metadata if specified
-        filtered_keys = self.vectors.keys()
+        filtered_keys = list(self.vectors.keys())
         if filter_metadata:
             filtered_keys = [
                 key for key in filtered_keys
                 if self._matches_filter(self.metadata.get(key, {}), filter_metadata)
             ]
         
-        # Calculate scores
+        # Calculate scores using numpy
         scores = [
-            (key, distance_measure(query_vector, self.vectors[key]), self.metadata.get(key, {}))
+            (key, distance_measure(query_np, self.vectors[key]), self.metadata.get(key, {}))
             for key in filtered_keys
         ]
         
@@ -244,7 +241,6 @@ class MetadataVectorDatabase:
             if key not in metadata:
                 return False
             if isinstance(value, list):
-                # If filter value is a list, check if metadata value is in the list
                 if metadata[key] not in value:
                     return False
             else:
@@ -286,7 +282,7 @@ class MetadataVectorDatabase:
         measure_func = SIMILARITY_MEASURES.get(similarity_measure, cosine_similarity)
         return self.search_by_text(query_text, k, measure_func, filter_metadata)
 
-    def retrieve_from_key(self, key: str) -> Tuple[Optional[List[float]], Optional[Dict[str, Any]]]:
+    def retrieve_from_key(self, key: str) -> Tuple[Optional[np.ndarray], Optional[Dict[str, Any]]]:
         """Retrieve vector and metadata by key."""
         return self.vectors.get(key), self.metadata.get(key)
 
@@ -303,7 +299,7 @@ class MetadataVectorDatabase:
         list_of_text: List[str],
         list_of_metadata: Optional[List[Dict[str, Any]]] = None
     ) -> "MetadataVectorDatabase":
-        """Build database from list of texts with optional metadata."""
+        """Build database from list of texts asynchronously."""
         embeddings = await self.embedding_model.async_get_embeddings(list_of_text)
         
         for i, (text, embedding) in enumerate(zip(list_of_text, embeddings)):
@@ -317,7 +313,7 @@ class MetadataVectorDatabase:
         list_of_text: List[str],
         list_of_metadata: Optional[List[Dict[str, Any]]] = None
     ) -> "MetadataVectorDatabase":
-        """Synchronously build database from list of texts with optional metadata."""
+        """Synchronously build database from list of texts."""
         embeddings = self.embedding_model.get_embeddings(list_of_text)
         
         for i, (text, embedding) in enumerate(zip(list_of_text, embeddings)):
@@ -330,12 +326,14 @@ class MetadataVectorDatabase:
         """
         Save the vector database to a JSON file.
         
+        Converts numpy arrays to lists for JSON serialization.
+        
         Args:
             filepath: Path to save the database (should end with .json)
         """
         data = {
             "vectors": {
-                key: _to_vector(vector) for key, vector in self.vectors.items()
+                key: _to_list(vector) for key, vector in self.vectors.items()
             },
             "metadata": self.metadata
         }
@@ -353,6 +351,8 @@ class MetadataVectorDatabase:
         """
         Load a vector database from a JSON file.
         
+        Converts lists back to numpy arrays for efficient computation.
+        
         Args:
             filepath: Path to the saved database
             embedding_model: Optional embedding model (only needed for new queries)
@@ -366,8 +366,7 @@ class MetadataVectorDatabase:
         db = cls(embedding_model=embedding_model)
         
         for key, vector_list in data["vectors"].items():
-            # Store as list (pure Python compatible)
-            db.vectors[key] = vector_list
+            db.vectors[key] = np.array(vector_list, dtype=np.float32)
         
         db.metadata = data.get("metadata", {})
         
@@ -377,7 +376,7 @@ class MetadataVectorDatabase:
     @classmethod
     def load_from_url(cls, url: str, embedding_model: EmbeddingModel = None) -> "MetadataVectorDatabase":
         """
-        Load a vector database from a URL (e.g., GitHub raw, Vercel Blob, S3).
+        Load a vector database from a URL (e.g., GitHub raw, S3, Vercel Blob).
         
         Args:
             url: URL to the JSON database file
@@ -397,8 +396,7 @@ class MetadataVectorDatabase:
         db = cls(embedding_model=embedding_model)
         
         for key, vector_list in data["vectors"].items():
-            # Store as list (pure Python compatible)
-            db.vectors[key] = vector_list
+            db.vectors[key] = np.array(vector_list, dtype=np.float32)
         
         db.metadata = data.get("metadata", {})
         
@@ -432,6 +430,7 @@ class MetadataVectorDatabase:
 
 
 if __name__ == "__main__":
+    # Example usage
     list_of_text = [
         "I like to eat broccoli and bananas.",
         "I ate a banana and spinach smoothie for breakfast.",
