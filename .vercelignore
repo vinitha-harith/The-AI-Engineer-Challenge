@@ -2,6 +2,16 @@
 vectorstore/
 data/
 
+# Exclude pyproject.toml and uv.lock to use requirements-vercel.txt instead
+pyproject.toml
+uv.lock
+
+# Production-only files (not needed for Vercel lightweight deployment)
+api/index.py
+api/rag.py
+api/embed.py
+aimakerspace/
+
 # Development files
 .venv/
 *.pyc
@@ -18,7 +28,6 @@ __pycache__/
 
 # Documentation (not needed in deployment)
 *.md
-!README.md
 
 # Local env files
 .env

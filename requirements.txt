@@ -1,9 +1,8 @@
+# Requirements for Vercel deployment (no numpy due to 250MB limit)
 fastapi>=0.115.12
-uvicorn>=0.34.2
 openai>=1.0.0
 python-dotenv>=1.0.0
-mangum>=0.17.0
 pydantic>=2.11.4
 pydantic-settings>=2.0.0
-PyPDF2>=3.0.0
-# numpy>=1.26.0  # Optional - pure Python fallback available
+# Note: numpy excluded to stay under Vercel's 250MB limit
+# Pure Python vector operations are used in index_vercel.py

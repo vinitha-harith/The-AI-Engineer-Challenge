@@ -1,18 +1,18 @@
 {
   "version": 2,
-  "buildCommand": "",
-  "installCommand": "",
-  "framework": null,
   "builds": [
     {
-      "src": "api/index.py",
-      "use": "@vercel/python"
+      "src": "api/index_vercel.py",
+      "use": "@vercel/python",
+      "config": {
+        "maxLambdaSize": "50mb"
+      }
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "api/index.py"
+      "dest": "api/index_vercel.py"
     }
   ]
 }

@@ -1,13 +1,13 @@
 """
-FastAPI Backend with RAG Retrieval
+Production FastAPI Backend with RAG
 
-Production-grade implementation using:
-- Lifespan context manager for initialization/cleanup
-- Application state for storing the pipeline
-- Dependency injection for accessing the pipeline in routes
+Full-featured production implementation with:
+- numpy for efficient vector operations
+- Lifespan context manager for proper initialization/cleanup
+- Dependency injection with FastAPI's Depends
+- pydantic-settings for configuration
 
-Prerequisites:
-    Run 'python -m api.embed' to create the vector database before starting the server.
+For Vercel deployment, use index_vercel.py instead (no numpy, loads from URL).
 """
 
 from contextlib import asynccontextmanager
@@ -31,8 +31,10 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
     
     openai_api_key: Optional[str] = None
-    # URL or path to vector database (defaults to GitHub raw URL)
-    vector_db_url: str = "https://raw.githubusercontent.com/vinitha-harith/The-AI-Engineer-Challenge/main/vectorstore/vector_db.json"
+    # Path to local vector database (for production deployments)
+    vector_db_path: str = str(Path(__file__).parent.parent / "vectorstore" / "vector_db.json")
+    # URL fallback (for remote loading)
+    vector_db_url: Optional[str] = None
     default_similarity_measure: str = "cosine"
     default_num_sources: int = 5
     chat_model: str = "gpt-4o-mini"
@@ -62,14 +64,20 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     
     # Startup: Initialize the retrieval pipeline
-    print("🚀 Starting up Wellness Coach API...")
-    print(f"   Loading vector database from: {settings.vector_db_url}")
+    print("🚀 Starting up Wellness Coach API (Production)...")
     
     try:
         from api.rag import RetrievalPipeline
         
+        # Prefer local file, fall back to URL
+        vector_source = settings.vector_db_path
+        if settings.vector_db_url and not os.path.exists(settings.vector_db_path):
+            vector_source = settings.vector_db_url
+        
+        print(f"   Loading vector database from: {vector_source}")
+        
         pipeline = RetrievalPipeline(
-            vector_db_source=settings.vector_db_url,
+            vector_db_source=vector_source,
             similarity_measure=settings.default_similarity_measure,
             chat_model=settings.chat_model
         )
@@ -83,7 +91,7 @@ async def lifespan(app: FastAPI):
         
     except FileNotFoundError as e:
         print(f"⚠️  Vector database not found: {e}")
-        print("   Run 'python -m api.embed' to create it, or check the URL.")
+        print("   Run 'python -m api.embed' to create it.")
         app.state.pipeline = None
         app.state.is_healthy = False
         
@@ -106,7 +114,7 @@ def create_app() -> FastAPI:
     
     app = FastAPI(
         title="Wellness Coach API",
-        description="RAG-powered wellness coaching API with topic filtering and multiple similarity measures",
+        description="Production RAG-powered wellness coaching API with numpy optimization",
         version="2.0.0",
         lifespan=lifespan
     )
@@ -125,61 +133,25 @@ def create_app() -> FastAPI:
 app = create_app()
 
 
-# ============ Lazy Pipeline Initialization ============
-
-# Cache for serverless environments (like Vercel) where lifespan events don't work
-_cached_pipeline = None
-
-
-def _get_or_create_pipeline(settings: Settings):
-    """
-    Lazy initialization of the pipeline for serverless environments.
-    
-    This is used because Vercel serverless functions don't support
-    FastAPI lifespan events.
-    """
-    global _cached_pipeline
-    
-    if _cached_pipeline is None:
-        from api.rag import RetrievalPipeline
-        
-        print(f"🚀 Lazy-loading pipeline from: {settings.vector_db_url}")
-        
-        pipeline = RetrievalPipeline(
-            vector_db_source=settings.vector_db_url,
-            similarity_measure=settings.default_similarity_measure,
-            chat_model=settings.chat_model
-        )
-        pipeline.initialize()
-        _cached_pipeline = pipeline
-        print(f"✅ Pipeline initialized with {pipeline.vector_db.get_size()} vectors")
-    
-    return _cached_pipeline
-
-
 # ============ Dependencies ============
 
-def get_pipeline(request: Request, settings: Settings = Depends(get_settings)):
+def get_pipeline(request: Request):
     """
     Dependency injection for the retrieval pipeline.
     
-    First tries app.state (for local development with lifespan).
-    Falls back to lazy initialization (for Vercel serverless).
+    Retrieves the pipeline from app.state (initialized at startup).
+    Raises 503 if the pipeline is not available.
     """
-    # Try app.state first (set by lifespan for local dev)
     pipeline = getattr(request.app.state, 'pipeline', None)
     
-    if pipeline is not None:
-        return pipeline
-    
-    # Fallback: lazy initialization for serverless
-    try:
-        return _get_or_create_pipeline(settings)
-    except Exception as e:
+    if pipeline is None:
         raise HTTPException(
             status_code=503,
-            detail=f"Service unavailable. Failed to initialize pipeline: {str(e)}"
+            detail="Service unavailable. Vector database not initialized. "
+                   "Run 'python -m api.embed' to create the database."
         )
+    
+    return pipeline
 
 
 def require_api_key(settings: Settings = Depends(get_settings)):
@@ -234,6 +206,7 @@ class HealthResponse(BaseModel):
     openai_configured: bool
     pipeline_status: str
     vector_count: int
+    runtime: str = "production"
 
 
 # ============ Endpoints ============
@@ -247,8 +220,7 @@ def root():
 @app.get("/api/health", response_model=HealthResponse)
 def health(request: Request, settings: Settings = Depends(get_settings)):
     """Detailed health check."""
-    # Try app.state first, then check cached pipeline
-    pipeline = getattr(request.app.state, 'pipeline', None) or _cached_pipeline
+    pipeline = getattr(request.app.state, 'pipeline', None)
     
     if pipeline is None:
         return HealthResponse(
@@ -275,7 +247,7 @@ def chat(
     """
     Chat endpoint with RAG-powered responses.
     
-    Retrieves relevant context from the pre-built vector database 
+    Retrieves relevant context from the vector database 
     and generates a response using the specified filters and similarity measure.
     """
     # Validate filters
@@ -336,7 +308,7 @@ def stats(pipeline = Depends(get_pipeline)):
 @app.get("/api/config", response_model=ConfigResponse)
 def config(request: Request):
     """Get available configuration options."""
-    pipeline = request.app.state.pipeline
+    pipeline = getattr(request.app.state, 'pipeline', None)
     
     if pipeline:
         return ConfigResponse(
@@ -345,7 +317,7 @@ def config(request: Request):
             available_similarity_measures=pipeline.get_available_similarity_measures()
         )
     
-    # Return defaults even if database not loaded
+    # Return defaults if pipeline not loaded
     from api.rag import AVAILABLE_TOPICS, AVAILABLE_DIFFICULTIES, AVAILABLE_SIMILARITY_MEASURES
     return ConfigResponse(
         available_topics=AVAILABLE_TOPICS,
@@ -387,7 +359,3 @@ def retrieve(
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving: {str(e)}")
-
-
-# For Vercel serverless deployment
-# The app object is used directly by Vercel's Python runtime

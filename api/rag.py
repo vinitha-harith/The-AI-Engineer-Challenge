@@ -1,8 +1,10 @@
 """
 RAG Retrieval Module - Query the pre-built vector database.
 
+Production-grade implementation with numpy optimization.
+
 This module loads a pre-built vector database (created by embed.py) and provides:
-- Semantic search with multiple similarity measures
+- Semantic search with multiple similarity measures (numpy-optimized)
 - Metadata-based filtering (topic, difficulty)
 - Context-aware response generation
 
@@ -11,13 +13,15 @@ Usage:
         python -m api.embed
     
     Then use this module for retrieval:
-        from api.rag import get_retrieval_pipeline
-        pipeline = get_retrieval_pipeline()
+        from api.rag import RetrievalPipeline
+        pipeline = RetrievalPipeline(vector_db_source="./vectorstore/vector_db.json")
+        pipeline.initialize()
         response = pipeline.generate_response("How can I sleep better?")
 """
 
 import os
 import sys
+from functools import lru_cache
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 
